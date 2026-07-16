@@ -24,22 +24,6 @@ Whether you're a beginner, preparing for interviews, or simply curious about how
 - Share everything through well-documented code and articles
 
 
- 📚 Each Algorithm Will Include
-
-- 🧠 Intuition
-- 📐 Mathematical Derivation
-- 📝 Step-by-Step Explanation
-- 💻 From Scratch Implementation
-- 🤖 Library Implementation
-- 📈 Visualizations
-- ⚙️ Complexity Analysis
-- 🎯 Hyperparameters
-- ✅ Advantages & Limitations
-- 🌍 Real-world Applications
-- 💡 Interview Questions
-- ✍️ Medium Article
-
-
 # 🚀 Why This Repository?
 
 There are countless tutorials that show **how** to use machine learning libraries.
