@@ -1,4 +1,4 @@
-# 🧠 Machine Learning From Scratch
+# 🧠 Machine Learning Fundamentals
 
 > *"Less magic. More intuition."*
 
