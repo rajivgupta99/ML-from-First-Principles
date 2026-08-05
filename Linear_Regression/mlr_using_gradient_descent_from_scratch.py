@@ -1,4 +1,7 @@
 import os
+import time
+import math
+from PIL import Image
 
 import pandas as pd
 import numpy as np
@@ -7,9 +10,10 @@ from sklearn.datasets import make_regression
 from sklearn.metrics import r2_score
 from matplotlib.ticker import MultipleLocator, MaxNLocator
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
 
-
-class GradientDescentRegressor:
+## Batch Gradient Descent
+class BatchGradientDescentRegressor:
     def __init__(self, learning_rate=0.01, epochs=1000):
         self.learning_rate = learning_rate
         self.epochs = epochs
@@ -30,7 +34,7 @@ class GradientDescentRegressor:
         
         for _ in range(self.epochs):
             # Predictions
-            y_pred = X_train @ self.weights + self.bias
+            y_pred = X_train @ self.weights + self.bias ## np.dot(X_train, self.weights) + self.bias
             
             # Loss in case of LR - Based on loss function selection, the gradients formula will changes but method to update weights and bias remains same
             loss = np.mean((y_train - y_pred) ** 2)
@@ -54,6 +58,134 @@ class GradientDescentRegressor:
         
     def predict(self, X):
         return X @ self.weights + self.bias
+
+
+## Stochastic Gradient Descent
+class StochasticGradientDescentRegressor:
+    def __init__(self, learning_rate=0.01, epochs=100000):
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        
+        self.weights = None
+        self.bias = 0.0
+        
+        self.weight_history = []
+        self.bias_history = []
+        self.loss_history = []
+        self.gradient_history = []
+        
+    def fit(self, X_train, y_train):
+        n_samples, n_features = X_train.shape
+        
+        self.weights = np.zeros(n_features)
+        self.bias = 0.0
+        
+        for _ in range(self.epochs):
+            indices = np.random.permutation(n_samples)
+            epoch_loss = 0
+            epoch_gradient = 0
+            
+            for j in indices:
+                # Predictions
+                y_pred = X_train[j] @ self.weights + self.bias ## np.dot(X_train, self.weights) + self.bias
+                
+                # Loss in case of LR - Based on loss function selection, the gradients formula will changes but method to update weights and bias remains same
+                ## Here loss is scalar - so we can avoid mean
+                loss = (y_train[j] - y_pred) ** 2
+            
+                # Gradients
+                # In Stochastic Gradient Descent updating using one sample at a time, so not divide by n_samples
+                dw = -2 * (y_train[j] - y_pred) * X_train[j]
+                db = -2 * (y_train[j] - y_pred)
+                
+                # Update
+                self.weights -= self.learning_rate * dw
+                self.bias -= self.learning_rate * db
+                
+                # Gradient magnitude
+                gradient = np.sqrt(np.sum(dw ** 2) + db ** 2) # np.linalg.norm(np.append(dw, db))
+                
+                epoch_loss += loss
+                epoch_gradient += gradient
+                
+            # Store history per epoch
+            self.weight_history.append(self.weights.copy())
+            self.bias_history.append(self.bias)
+            self.loss_history.append(epoch_loss / n_samples)
+            self.gradient_history.append(epoch_gradient / n_samples)
+        
+    def predict(self, X):
+        return X @ self.weights + self.bias
+
+
+## Mini Batch Gradient Descent
+class MiniBatchcGradientDescentRegressor:
+    def __init__(self, learning_rate=0.01, epochs=1000, batch_size=32):
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        self.batch_size = batch_size
+        
+        self.weights = None
+        self.bias = 0.0
+        
+        self.weight_history = []
+        self.bias_history = []
+        self.loss_history = []
+        self.gradient_history = []
+        
+    def fit(self, X_train, y_train):
+        n_samples, n_features = X_train.shape
+        
+        self.weights = np.zeros(n_features)
+        self.bias = 0.0
+        
+        for _ in range(self.epochs):
+            indices = np.random.permutation(n_samples)
+            
+            X = X_train[indices]
+            y = y_train[indices]
+            
+            epoch_loss = 0
+            epoch_gradient = 0
+            
+            for start in range(0, n_samples, self.batch_size):
+                end = start + self.batch_size
+                
+                X_batch = X[start:end]
+                y_batch = y[start:end]
+                
+                # Predictions
+                y_pred = X_batch @ self.weights + self.bias ## np.dot(X_train, self.weights) + self.bias
+                
+                # Loss in case of LR - Based on loss function selection, the gradients formula will changes but method to update weights and bias remains same
+                loss = np.mean((y_batch - y_pred) ** 2)
+                error = y_batch - y_pred
+                
+                # Gradients
+                dw = -(2 / len(X_batch)) * (X_batch.T @ error)
+                db = -(2 / len(X_batch)) * np.sum(error)
+                
+                # Update
+                self.weights -= self.learning_rate * dw
+                self.bias -= self.learning_rate * db
+                
+                # Gradient magnitude
+                gradient = np.sqrt(np.sum(dw ** 2) + db ** 2) # np.linalg.norm(np.append(dw, db))
+                
+                epoch_loss += loss
+                epoch_gradient += gradient
+            
+            num_batches = int(np.ceil(n_samples / self.batch_size))
+            
+            # Store history per epoch
+            self.weight_history.append(self.weights.copy())
+            self.bias_history.append(self.bias)
+            self.loss_history.append(epoch_loss / num_batches)
+            self.gradient_history.append(epoch_gradient / num_batches)
+        
+    def predict(self, X):
+        return X @ self.weights + self.bias
+
 
 
 def plot_weights(model, ax=None):
@@ -228,7 +360,7 @@ def plot_residuals(model, X_test, y_test, ax=None):
         plt.show()
 
 
-def plot_lr_comparison(X_train, y_train, learning_rates=(0.0001, 0.001, 0.01, 0.1), epochs=200, ax=None):
+def plot_lr_comparison(X_train, y_train, learning_rates=(0.0001, 0.001, 0.01, 0.1), epochs=200, ax=None, func=BatchGradientDescentRegressor):
     created_fig = False
 
     if ax is None:
@@ -236,7 +368,7 @@ def plot_lr_comparison(X_train, y_train, learning_rates=(0.0001, 0.001, 0.01, 0.
         created_fig = True
 
     for lr in learning_rates:
-        model = GradientDescentRegressor(learning_rate=lr, epochs=epochs)
+        model = func(learning_rate=lr, epochs=epochs)
         model.fit(X_train, y_train)
 
         ax.plot(
@@ -257,10 +389,10 @@ def plot_lr_comparison(X_train, y_train, learning_rates=(0.0001, 0.001, 0.01, 0.
     
 
 ## Training Dashboard
-def training_dashboard(model):
+def training_dashboard(model, prefix="batch"):
     fig, axes = plt.subplots(2, 2, figsize=(10, 8), constrained_layout=True)
 
-    fig.suptitle("Gradient Descent Training Dashboard", fontsize=14, fontweight="bold")
+    fig.suptitle(f"{prefix} Gradient Descent Training Dashboard", fontsize=14, fontweight="bold")
 
     plot_loss(model, ax=axes[0, 0])
     plot_gradients(model, ax=axes[0, 1])
@@ -268,23 +400,23 @@ def training_dashboard(model):
     plot_weights(model, ax=axes[1, 0])
     plot_bias(model, ax=axes[1, 1])
 
-    plt.show()
+    return fig
 
 
 ## Model Evaluation Dashboard
-def evaluation_dashboard(model, X_test, y_test):
+def evaluation_dashboard(model, X_test, y_test, prefix="batch"):
     fig, axes = plt.subplots(1, 2, figsize=(12, 6), constrained_layout=True)
 
-    fig.suptitle( "Model Evaluation Dashboard", fontsize=18, fontweight="bold")
+    fig.suptitle(f"{prefix} Model Evaluation Dashboard", fontsize=18, fontweight="bold")
 
     plot_predictions(model, X_test, y_test, ax=axes[0])
     plot_residuals(model, X_test, y_test, ax=axes[1])
 
-    plt.show()
+    return fig
 
 
 ## Optimizer Dashboard
-def optimizer_dashboard(X_train, y_train, learning_rates=(0.0001, 0.001, 0.01, 0.1), epochs=200):
+def optimizer_dashboard(X_train, y_train, learning_rates=(0.0001, 0.001, 0.01, 0.1), epochs=200, prefix="batch", func=BatchGradientDescentRegressor):
     """
     ### How to Read a Learning Rate Comparison Graph
 
@@ -323,33 +455,95 @@ def optimizer_dashboard(X_train, y_train, learning_rates=(0.0001, 0.001, 0.01, 0
         * Remains smooth and stable without oscillations or divergence.
     """
     fig, ax = plt.subplots(figsize=(10, 6), constrained_layout=True)
-    fig.suptitle("Optimizer Dashboard", fontsize=18, fontweight="bold")
+    fig.suptitle(f"{prefix} Optimizer Dashboard", fontsize=18, fontweight="bold")
 
-    plot_lr_comparison(X_train, y_train, learning_rates=learning_rates, epochs=epochs, ax=ax)
+    plot_lr_comparison(X_train, y_train, learning_rates=learning_rates, epochs=epochs, ax=ax, func=func)
     
-    plt.show()
+    return fig
       
 
+def combined_dashboard(figures, cols=3):
+    # Save figures
+    for i, fig in enumerate(figures, start=1):
+        fig.savefig(f"fig{i}.png", dpi=150)
+
+    # Load images
+    imgs = [Image.open(f"fig{i}.png") for i in range(1, len(figures) + 1)]
+
+    w = max(img.width for img in imgs)
+    h = max(img.height for img in imgs)
+
+    rows = math.ceil(len(imgs) / cols)
+
+    combined = Image.new("RGB", (cols * w, rows * h), "white")
+
+    for idx, img in enumerate(imgs):
+        row = idx % rows
+        col = idx // rows
+        combined.paste(img, (col * w, row * h))
+
+    combined.save("dashboard.png")
+    combined.show()
+    
+
 if __name__ == "__main__":
+    figures = []
+    
     N_FEATURES = 7
     N_TARGETS = 1
-    X, y = make_regression(n_samples=100000, n_features=N_FEATURES, n_informative=7, n_targets=N_TARGETS, noise=50)
+    X, y = make_regression(n_samples=100000, n_features=N_FEATURES, n_informative=5, n_targets=N_TARGETS, noise=50)
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=51)
+    
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
     
     feature_names = [f"f{i + 1}" for i in range(N_FEATURES)]
     data = pd.DataFrame(X, columns=feature_names)
     data["target"] = y
     
-    model = GradientDescentRegressor(0.01, 250)
+    ## Batch Gradient Descent
+    model = BatchGradientDescentRegressor(0.01, 250)
     
     model.fit(X_train, y_train)
     
     y_pred = model.predict(X_test)
-    print(f"Predicted y: {y_pred}")    
+    print(f"Batch GDPredicted y: {y_pred}")    
     
-    print(f"r2 score: {r2_score(y_test, y_pred)}")
+    print(f"Batch GD r2 score: {r2_score(y_test, y_pred)}")
     
-    training_dashboard(model)
-    evaluation_dashboard(model, X_test, y_test)
-    optimizer_dashboard(X_train, y_train, learning_rates=(0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.3), epochs=250)   
+    figures.append(training_dashboard(model, prefix="Batch"))
+    figures.append(evaluation_dashboard(model, X_test, y_test, prefix="Batch"))
+    figures.append(optimizer_dashboard(X_train, y_train, learning_rates=(0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.3), epochs=250, prefix="Batch", func=BatchGradientDescentRegressor)) 
+    
+    ## Stochastic Gradient Descent
+    model = StochasticGradientDescentRegressor(1e-4, 100)
+    
+    model.fit(X_train, y_train)
+    
+    y_pred = model.predict(X_test)
+    print(f"Stochastic GD Predicted y: {y_pred}")    
+    
+    print(f"Stochastic GD r2 score: {r2_score(y_test, y_pred)}")
+    
+    figures.append(training_dashboard(model, prefix="Stochastic"))
+    figures.append(evaluation_dashboard(model, X_test, y_test, prefix="Stochastic"))
+    figures.append(optimizer_dashboard(X_train, y_train, learning_rates=(1e-4, 1e-5, 1e-7), epochs=30, prefix="Stochastic", func=StochasticGradientDescentRegressor))  
+    
+    
+    ## Mini Batch Gradient Descent
+    model = MiniBatchcGradientDescentRegressor(1e-2, 100)
+    
+    model.fit(X_train, y_train)
+    
+    y_pred = model.predict(X_test)
+    print(f"Mini Batch GD Predicted y: {y_pred}")    
+    
+    print(f"Mini Batch GD r2 score: {r2_score(y_test, y_pred)}")
+    
+    figures.append(training_dashboard(model, prefix="Mini Batch"))
+    figures.append(evaluation_dashboard(model, X_test, y_test, prefix="Mini Batch"))
+    figures.append(optimizer_dashboard(X_train, y_train, learning_rates=(1e-2, 1e-3, 1e-4), epochs=100, prefix="Mini Batch", func=MiniBatchcGradientDescentRegressor))   
+
+    combined_dashboard(figures)
